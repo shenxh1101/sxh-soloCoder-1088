@@ -117,16 +117,39 @@ async function loadNotes() {
 async function addNote() {
   const input = document.getElementById('noteInput');
   const content = input.value.trim();
+  const addTaskCheck = document.getElementById('addTaskCheck');
   
   if (!content) {
     showToast('请输入备注内容');
     return;
   }
   
-  await API.send('addNote', { productUrl: currentTabUrl, note: content });
+  const noteItem = await API.send('addNote', { productUrl: currentTabUrl, note: content });
+  
+  if (addTaskCheck && addTaskCheck.checked) {
+    const products = await API.send('getProducts');
+    const product = products.find(p => p.url === currentTabUrl);
+    
+    const task = {
+      title: content.slice(0, 30) + (content.length > 30 ? '...' : ''),
+      type: 'followup',
+      note: content,
+      productId: product?.id || null,
+      productName: product?.title || currentTabTitle,
+      productUrl: currentTabUrl,
+      noteId: noteItem?.id || null,
+      notePreview: content.slice(0, 50)
+    };
+    
+    await API.send('addTask', { task });
+    addTaskCheck.checked = false;
+    showToast('备注和任务已添加');
+  } else {
+    showToast('备注已添加');
+  }
+  
   input.value = '';
   await loadNotes();
-  showToast('备注已添加');
 }
 
 async function checkProductInfo() {

@@ -322,26 +322,185 @@ const CompetitorManager = {
     const compRatings = competitors
       .map(c => parseFloat(c.rating))
       .filter(r => !isNaN(r));
-    const compSales = competitors
+    const compSalesNums = competitors
       .map(c => this.parseSales(c.sales))
       .filter(s => s !== null);
     
+    const avgCompetitorPrice = compPrices.length > 0 
+      ? (compPrices.reduce((a, b) => a + b, 0) / compPrices.length) 
+      : null;
+    const minCompetitorPrice = compPrices.length > 0 ? Math.min(...compPrices) : null;
+    const maxCompetitorPrice = compPrices.length > 0 ? Math.max(...compPrices) : null;
+    const avgCompetitorRating = compRatings.length > 0 
+      ? (compRatings.reduce((a, b) => a + b, 0) / compRatings.length) 
+      : null;
+    const avgCompetitorSales = compSalesNums.length > 0
+      ? (compSalesNums.reduce((a, b) => a + b, 0) / compSalesNums.length)
+      : null;
+    
+    const priceRank = productPrice !== null && compPrices.length > 0
+      ? compPrices.filter(p => p < productPrice).length + 1
+      : null;
+    const ratingRank = productRating !== null && compRatings.length > 0
+      ? compRatings.filter(r => r > productRating).length + 1
+      : null;
+    const salesRank = productSales !== null && compSalesNums.length > 0
+      ? compSalesNums.filter(s => s > productSales).length + 1
+      : null;
+    
+    const priceConclusion = this._getPriceConclusion(productPrice, avgCompetitorPrice, minCompetitorPrice, priceRank);
+    const ratingConclusion = this._getRatingConclusion(productRating, avgCompetitorRating, ratingRank);
+    const salesConclusion = this._getSalesConclusion(productSales, avgCompetitorSales, salesRank);
+    
+    const suggestions = [];
+    if (priceConclusion?.isExpensive) {
+      suggestions.push({ type: 'price', level: 'warn', text: `价格比竞品均价高 ¥${(productPrice - avgCompetitorPrice).toFixed(2)}，考虑降价或增加卖点` });
+    }
+    if (ratingConclusion?.isLower) {
+      suggestions.push({ type: 'rating', level: 'warn', text: `评分比竞品低 ${(avgCompetitorRating - productRating).toFixed(1)} 分，需要提升评价` });
+    }
+    if (salesConclusion?.isLower) {
+      suggestions.push({ type: 'sales', level: 'info', text: `销量落后，可参考竞品的营销活动` });
+    }
+    if (suggestions.length === 0 && competitors.length > 0) {
+      suggestions.push({ type: 'general', level: 'success', text: '各项指标表现良好，继续保持！' });
+    }
+    
     return {
-      avgCompetitorPrice: compPrices.length > 0 
-        ? (compPrices.reduce((a, b) => a + b, 0) / compPrices.length).toFixed(2) 
-        : null,
-      minCompetitorPrice: compPrices.length > 0 ? Math.min(...compPrices) : null,
-      maxCompetitorPrice: compPrices.length > 0 ? Math.max(...compPrices) : null,
-      avgCompetitorRating: compRatings.length > 0 
-        ? (compRatings.reduce((a, b) => a + b, 0) / compRatings.length).toFixed(1) 
-        : null,
-      priceRank: productPrice !== null && compPrices.length > 0
-        ? compPrices.filter(p => p < productPrice).length + 1
-        : null,
+      avgCompetitorPrice: avgCompetitorPrice ? avgCompetitorPrice.toFixed(2) : null,
+      minCompetitorPrice,
+      maxCompetitorPrice,
+      avgCompetitorRating: avgCompetitorRating ? avgCompetitorRating.toFixed(1) : null,
+      avgCompetitorSales: avgCompetitorSales ? Math.round(avgCompetitorSales) : null,
+      priceRank,
+      ratingRank,
+      salesRank,
       totalCompetitors: competitors.length,
-      productPrice: productPrice,
-      productRating: productRating,
-      productSales: productSales
+      productPrice,
+      productRating,
+      productSales,
+      priceConclusion,
+      ratingConclusion,
+      salesConclusion,
+      suggestions
+    };
+  },
+  
+  _getPriceConclusion(productPrice, avgPrice, minPrice, rank) {
+    if (productPrice === null || avgPrice === null) return null;
+    const diff = productPrice - avgPrice;
+    const diffPercent = avgPrice > 0 ? (diff / avgPrice * 100).toFixed(1) : 0;
+    
+    let label = '';
+    let level = 'neutral';
+    let isExpensive = false;
+    let isCheapest = false;
+    
+    if (productPrice < minPrice) {
+      label = '价格最低';
+      level = 'success';
+      isCheapest = true;
+    } else if (diff < -avgPrice * 0.05) {
+      label = '比均价便宜';
+      level = 'success';
+    } else if (diff > avgPrice * 0.05) {
+      label = '比均价贵';
+      level = 'warn';
+      isExpensive = true;
+    } else {
+      label = '价格接近均价';
+      level = 'neutral';
+    }
+    
+    return {
+      label,
+      level,
+      diff: diff.toFixed(2),
+      diffPercent,
+      rank,
+      isExpensive,
+      isCheapest,
+      text: diff >= 0 
+        ? `比竞品均价贵 ¥${diff.toFixed(2)}（+${diffPercent}%）` 
+        : `比竞品均价便宜 ¥${Math.abs(diff).toFixed(2)}（${diffPercent}%）`
+    };
+  },
+  
+  _getRatingConclusion(productRating, avgRating, rank) {
+    if (productRating === null || avgRating === null) return null;
+    const diff = productRating - avgRating;
+    
+    let label = '';
+    let level = 'neutral';
+    let isLower = false;
+    let isHighest = false;
+    
+    if (diff > 0.2) {
+      label = '评分领先';
+      level = 'success';
+      isHighest = true;
+    } else if (diff < -0.2) {
+      label = '评分偏低';
+      level = 'warn';
+      isLower = true;
+    } else {
+      label = '评分接近';
+      level = 'neutral';
+    }
+    
+    return {
+      label,
+      level,
+      diff: diff.toFixed(1),
+      rank,
+      isLower,
+      isHighest,
+      text: diff >= 0 
+        ? `比竞品均价高 ${diff.toFixed(1)} 分` 
+        : `比竞品均价低 ${Math.abs(diff).toFixed(1)} 分`
+    };
+  },
+  
+  _getSalesConclusion(productSales, avgSales, rank) {
+    if (productSales === null || avgSales === null || avgSales === 0) return null;
+    const diff = productSales - avgSales;
+    const diffPercent = ((productSales - avgSales) / avgSales * 100).toFixed(1);
+    const times = productSales / avgSales;
+    
+    let label = '';
+    let level = 'neutral';
+    let isLower = false;
+    let isHighest = false;
+    
+    if (times > 1.5) {
+      label = '销量领先';
+      level = 'success';
+      isHighest = true;
+    } else if (times < 0.7) {
+      label = '销量落后';
+      level = 'warn';
+      isLower = true;
+    } else {
+      label = '销量接近';
+      level = 'neutral';
+    }
+    
+    function formatSales(num) {
+      if (num >= 10000) return (num / 10000).toFixed(1) + '万';
+      return Math.round(num).toString();
+    }
+    
+    return {
+      label,
+      level,
+      diff: Math.round(diff),
+      diffPercent,
+      rank,
+      isLower,
+      isHighest,
+      text: diff >= 0 
+        ? `比竞品均价多 ${formatSales(diff)} 件（${diffPercent}%）` 
+        : `比竞品均价少 ${formatSales(Math.abs(diff))} 件（${diffPercent}%）`
     };
   },
 
@@ -425,8 +584,9 @@ const DailyReport = {
     };
   },
 
-  async exportCSV(date = new Date()) {
+  async exportCSV(date = new Date(), sections = null) {
     const report = await this.generate(date);
+    const include = sections || ['products', 'priceAlerts', 'competitors', 'tasks'];
     let csv = '\uFEFF';
     
     csv += `电商运营日报,${report.date}\n\n`;
@@ -442,52 +602,218 @@ const DailyReport = {
     csv += `监控商品数,${report.summary.totalPriceTracking}\n`;
     csv += '\n';
     
-    csv += '【今日新增商品】\n';
-    csv += '标题,价格,链接,采集时间\n';
-    report.newProducts.forEach(p => {
-      csv += `"${p.title}","${p.price || ''}","${p.url || ''}","${new Date(p.createdAt).toLocaleString('zh-CN')}"\n`;
-    });
-    csv += '\n';
+    if (include.includes('products')) {
+      csv += '【今日新增商品】\n';
+      csv += '标题,价格,链接,采集时间\n';
+      report.newProducts.forEach(p => {
+        csv += `"${p.title}","${p.price || ''}","${p.url || ''}","${new Date(p.createdAt).toLocaleString('zh-CN')}"\n`;
+      });
+      csv += '\n';
+    }
     
-    csv += '【价格预警商品】\n';
-    csv += '商品名称,当前价格,最低售价,差额\n';
-    report.priceAlerts.forEach(item => {
-      const diff = item.minPrice - item.currentPriceNum;
-      csv += `"${item.product?.title || '未知'}","${item.currentPrice}","¥${item.minPrice}","¥${diff.toFixed(2)}"\n`;
-    });
-    csv += '\n';
+    if (include.includes('priceAlerts')) {
+      csv += '【价格预警商品】\n';
+      csv += '商品名称,当前价格,最低售价,差额,商品链接\n';
+      report.priceAlerts.forEach(item => {
+        const diff = item.minPrice - item.currentPriceNum;
+        csv += `"${item.product?.title || '未知'}","${item.currentPrice}","¥${item.minPrice}","¥${diff.toFixed(2)}","${item.product?.url || ''}"\n`;
+      });
+      csv += '\n';
+    }
     
-    csv += '【竞品价格变动】\n';
-    csv += '竞品名称,当前价格,上次价格,变动幅度,变动时间\n';
-    report.competitorChanges.forEach(c => {
-      const history = c.priceHistory || [];
-      let prevPrice = '-';
-      let change = '-';
-      if (history.length >= 2) {
-        const last = history[history.length - 1];
-        const prev = history[history.length - 2];
-        if (prev.priceNum !== null && last.priceNum !== null) {
-          prevPrice = prev.price;
-          const diff = last.priceNum - prev.priceNum;
-          change = (diff > 0 ? '+' : '') + diff.toFixed(2);
+    if (include.includes('competitors')) {
+      csv += '【竞品价格变动】\n';
+      csv += '竞品名称,当前价格,上次价格,变动幅度,变动时间,竞品链接\n';
+      report.competitorChanges.forEach(c => {
+        const history = c.priceHistory || [];
+        let prevPrice = '-';
+        let change = '-';
+        if (history.length >= 2) {
+          const last = history[history.length - 1];
+          const prev = history[history.length - 2];
+          if (prev.priceNum !== null && last.priceNum !== null) {
+            prevPrice = prev.price;
+            const diff = last.priceNum - prev.priceNum;
+            change = (diff > 0 ? '+' : '') + diff.toFixed(2);
+          }
         }
-      }
-      csv += `"${c.name}","${c.price}","${prevPrice}","${change}","${new Date(c.lastPriceChange).toLocaleString('zh-CN')}"\n`;
-    });
-    csv += '\n';
+        csv += `"${c.name}","${c.price}","${prevPrice}","${change}","${new Date(c.lastPriceChange).toLocaleString('zh-CN')}","${c.url || ''}"\n`;
+      });
+      csv += '\n';
+    }
     
-    csv += '【待跟进任务】\n';
-    csv += '任务标题,类型,截止日期,备注\n';
-    report.pendingTasks.forEach(t => {
-      const typeLabel = { followup: '待跟进', promo: '优惠到期', other: '其他' }[t.type] || '其他';
-      csv += `"${t.title}","${typeLabel}","${t.dueDate || '-'}","${t.note || ''}"\n`;
-    });
+    if (include.includes('tasks')) {
+      csv += '【待跟进任务】\n';
+      csv += '任务标题,类型,截止日期,关联商品,备注\n';
+      report.pendingTasks.forEach(t => {
+        const typeLabel = { followup: '待跟进', promo: '优惠到期', other: '其他' }[t.type] || '其他';
+        csv += `"${t.title}","${typeLabel}","${t.dueDate || '-'}","${t.productName || ''}","${t.note || ''}"\n`;
+      });
+    }
     
     return csv;
   },
 
-  async exportHTML(date = new Date()) {
+  async exportHTML(date = new Date(), sections = null) {
     const report = await this.generate(date);
+    const include = sections || ['products', 'priceAlerts', 'competitors', 'tasks'];
+    
+    let sectionsHtml = '';
+    
+    if (include.includes('products')) {
+      sectionsHtml += `
+    <div class="section">
+      <h2>🛒 今日新增商品 (${report.summary.newProducts})</h2>
+      ${report.newProducts.length > 0 ? `
+      <table>
+        <thead>
+          <tr>
+            <th>商品标题</th>
+            <th>价格</th>
+            <th>来源</th>
+            <th>采集时间</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${report.newProducts.map(p => `
+          <tr>
+            <td>${p.title}</td>
+            <td><strong>${p.price || '-'}</strong></td>
+            <td>${p.source || '-'}</td>
+            <td>${new Date(p.createdAt).toLocaleTimeString('zh-CN')}</td>
+            <td>${p.url ? `<a href="${p.url}" target="_blank" style="color:#667eea;text-decoration:none;font-size:12px;">查看商品 →</a>` : '-'}</td>
+          </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      ` : '<div class="empty">今日暂无新增商品</div>'}
+    </div>`;
+    }
+    
+    if (include.includes('priceAlerts')) {
+      sectionsHtml += `
+    <div class="section">
+      <h2>💰 价格预警 (${report.summary.priceAlerts})</h2>
+      ${report.priceAlerts.length > 0 ? `
+      <table>
+        <thead>
+          <tr>
+            <th>商品名称</th>
+            <th>当前价格</th>
+            <th>最低售价</th>
+            <th>差额</th>
+            <th>状态</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${report.priceAlerts.map(item => {
+            const diff = item.minPrice - item.currentPriceNum;
+            return `
+            <tr>
+              <td>${item.product?.title || '未知商品'}</td>
+              <td><strong class="price-down">${item.currentPrice}</strong></td>
+              <td>¥${item.minPrice}</td>
+              <td class="price-down">-¥${diff.toFixed(2)}</td>
+              <td><span class="alert-badge">低于预警线</span></td>
+              <td>${item.product?.url ? `<a href="${item.product.url}" target="_blank" style="color:#667eea;text-decoration:none;font-size:12px;">查看商品 →</a>` : '-'}</td>
+            </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+      ` : '<div class="empty">今日暂无价格预警</div>'}
+    </div>`;
+    }
+    
+    if (include.includes('competitors')) {
+      sectionsHtml += `
+    <div class="section">
+      <h2>📊 竞品价格变动 (${report.summary.competitorChanges})</h2>
+      ${report.competitorChanges.length > 0 ? `
+      <table>
+        <thead>
+          <tr>
+            <th>竞品名称</th>
+            <th>当前价格</th>
+            <th>上次价格</th>
+            <th>变动幅度</th>
+            <th>变动时间</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${report.competitorChanges.map(c => {
+            const history = c.priceHistory || [];
+            let prevPrice = '-';
+            let changeClass = '';
+            let changeText = '-';
+            if (history.length >= 2) {
+              const last = history[history.length - 1];
+              const prev = history[history.length - 2];
+              if (prev.priceNum !== null && last.priceNum !== null) {
+                prevPrice = prev.price;
+                const diff = last.priceNum - prev.priceNum;
+                if (diff > 0) {
+                  changeClass = 'price-up';
+                  changeText = '+¥' + diff.toFixed(2);
+                } else if (diff < 0) {
+                  changeClass = 'price-down';
+                  changeText = '-¥' + Math.abs(diff).toFixed(2);
+                } else {
+                  changeText = '持平';
+                }
+              }
+            }
+            return `
+            <tr>
+              <td>${c.name}</td>
+              <td><strong>${c.price}</strong></td>
+              <td>${prevPrice}</td>
+              <td class="${changeClass}">${changeText}</td>
+              <td>${new Date(c.lastPriceChange).toLocaleTimeString('zh-CN')}</td>
+              <td>${c.url ? `<a href="${c.url}" target="_blank" style="color:#667eea;text-decoration:none;font-size:12px;">查看竞品 →</a>` : '-'}</td>
+            </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+      ` : '<div class="empty">今日暂无竞品价格变动</div>'}
+    </div>`;
+    }
+    
+    if (include.includes('tasks')) {
+      sectionsHtml += `
+    <div class="section">
+      <h2>⏰ 待跟进任务 (${report.summary.pendingTasks})</h2>
+      ${report.pendingTasks.length > 0 ? `
+      <table>
+        <thead>
+          <tr>
+            <th>任务标题</th>
+            <th>类型</th>
+            <th>关联商品</th>
+            <th>截止日期</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${report.pendingTasks.map(t => {
+            const typeLabel = { followup: '待跟进', promo: '优惠到期', other: '其他' }[t.type] || '其他';
+            return `
+            <tr>
+              <td>${t.title}</td>
+              <td><span class="task-type ${t.type || 'other'}">${typeLabel}</span></td>
+              <td>${t.productName ? t.productName.slice(0, 20) + '...' : '-'}</td>
+              <td>${t.dueDate || '-'}</td>
+            </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+      ` : '<div class="empty">暂无待跟进任务</div>'}
+    </div>`;
+    }
     
     return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -551,142 +877,7 @@ const DailyReport = {
       </div>
     </div>
     
-    <div class="section">
-      <h2>🛒 今日新增商品 (${report.summary.newProducts})</h2>
-      ${report.newProducts.length > 0 ? `
-      <table>
-        <thead>
-          <tr>
-            <th>商品标题</th>
-            <th>价格</th>
-            <th>来源</th>
-            <th>采集时间</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${report.newProducts.map(p => `
-          <tr>
-            <td>${p.title}</td>
-            <td><strong>${p.price || '-'}</strong></td>
-            <td>${p.source || '-'}</td>
-            <td>${new Date(p.createdAt).toLocaleTimeString('zh-CN')}</td>
-          </tr>
-          `).join('')}
-        </tbody>
-      </table>
-      ` : '<div class="empty">今日暂无新增商品</div>'}
-    </div>
-    
-    <div class="section">
-      <h2>💰 价格预警 (${report.summary.priceAlerts})</h2>
-      ${report.priceAlerts.length > 0 ? `
-      <table>
-        <thead>
-          <tr>
-            <th>商品名称</th>
-            <th>当前价格</th>
-            <th>最低售价</th>
-            <th>差额</th>
-            <th>状态</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${report.priceAlerts.map(item => {
-            const diff = item.minPrice - item.currentPriceNum;
-            return `
-            <tr>
-              <td>${item.product?.title || '未知商品'}</td>
-              <td><strong class="price-down">${item.currentPrice}</strong></td>
-              <td>¥${item.minPrice}</td>
-              <td class="price-down">-¥${diff.toFixed(2)}</td>
-              <td><span class="alert-badge">低于预警线</span></td>
-            </tr>
-            `;
-          }).join('')}
-        </tbody>
-      </table>
-      ` : '<div class="empty">今日暂无价格预警</div>'}
-    </div>
-    
-    <div class="section">
-      <h2>📊 竞品价格变动 (${report.summary.competitorChanges})</h2>
-      ${report.competitorChanges.length > 0 ? `
-      <table>
-        <thead>
-          <tr>
-            <th>竞品名称</th>
-            <th>当前价格</th>
-            <th>上次价格</th>
-            <th>变动幅度</th>
-            <th>变动时间</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${report.competitorChanges.map(c => {
-            const history = c.priceHistory || [];
-            let prevPrice = '-';
-            let changeClass = '';
-            let changeText = '-';
-            if (history.length >= 2) {
-              const last = history[history.length - 1];
-              const prev = history[history.length - 2];
-              if (prev.priceNum !== null && last.priceNum !== null) {
-                prevPrice = prev.price;
-                const diff = last.priceNum - prev.priceNum;
-                if (diff > 0) {
-                  changeClass = 'price-up';
-                  changeText = '+¥' + diff.toFixed(2);
-                } else if (diff < 0) {
-                  changeClass = 'price-down';
-                  changeText = '-¥' + Math.abs(diff).toFixed(2);
-                } else {
-                  changeText = '持平';
-                }
-              }
-            }
-            return `
-            <tr>
-              <td>${c.name}</td>
-              <td><strong>${c.price}</strong></td>
-              <td>${prevPrice}</td>
-              <td class="${changeClass}">${changeText}</td>
-              <td>${new Date(c.lastPriceChange).toLocaleTimeString('zh-CN')}</td>
-            </tr>
-            `;
-          }).join('')}
-        </tbody>
-      </table>
-      ` : '<div class="empty">今日暂无竞品价格变动</div>'}
-    </div>
-    
-    <div class="section">
-      <h2>⏰ 待跟进任务 (${report.summary.pendingTasks})</h2>
-      ${report.pendingTasks.length > 0 ? `
-      <table>
-        <thead>
-          <tr>
-            <th>任务标题</th>
-            <th>类型</th>
-            <th>关联商品</th>
-            <th>截止日期</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${report.pendingTasks.map(t => {
-            const typeLabel = { followup: '待跟进', promo: '优惠到期', other: '其他' }[t.type] || '其他';
-            return `
-            <tr>
-              <td>${t.title}</td>
-              <td><span class="task-type ${t.type || 'other'}">${typeLabel}</span></td>
-              <td>${t.productName ? t.productName.slice(0, 20) + '...' : '-'}</td>
-              <td>${t.dueDate || '-'}</td>
-            </tr>
-            `;
-          }).join('')}
-        </tbody>
-      </table>
-      ` : '<div class="empty">暂无待跟进任务</div>'}
-    </div>
+    ${sectionsHtml}
     
     <div class="footer">
       电商运营助手 · 自动生成于 ${new Date().toLocaleString('zh-CN')}
@@ -978,10 +1169,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           sendResponse(await DailyReport.generate());
           break;
         case 'exportDailyReportCSV':
-          sendResponse(await DailyReport.exportCSV());
+          sendResponse(await DailyReport.exportCSV(new Date(), request.sections));
           break;
         case 'exportDailyReportHTML':
-          sendResponse(await DailyReport.exportHTML());
+          sendResponse(await DailyReport.exportHTML(new Date(), request.sections));
           break;
 
         case 'openSidepanel':
