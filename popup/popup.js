@@ -8,6 +8,32 @@ const API = {
   }
 };
 
+function parsePrice(priceStr) {
+  if (!priceStr) return null;
+  if (typeof priceStr === 'number') return priceStr;
+  
+  const str = priceStr.toString().trim();
+  
+  const rangeMatch = str.match(/(\d+(?:\.\d+)?)\s*[-~～至]\s*(\d+(?:\.\d+)?)/);
+  if (rangeMatch) {
+    return parseFloat(rangeMatch[1]);
+  }
+  
+  const cleaned = str.replace(/[^\d.-]/g, '');
+  const match = cleaned.match(/-?\d+(\.\d+)?/);
+  if (match) return parseFloat(match[0]);
+  return null;
+}
+
+function formatTimeAgo(timestamp) {
+  if (!timestamp) return '-';
+  const diff = Date.now() - timestamp;
+  if (diff < 60 * 1000) return '刚刚';
+  if (diff < 60 * 60 * 1000) return Math.floor(diff / (60 * 1000)) + '分钟前';
+  if (diff < 24 * 60 * 60 * 1000) return Math.floor(diff / (60 * 60 * 1000)) + '小时前';
+  return Math.floor(diff / (24 * 60 * 60 * 1000)) + '天前';
+}
+
 function showToast(message, duration = 2000) {
   const toast = document.createElement('div');
   toast.className = 'toast';
@@ -350,21 +376,48 @@ async function loadPriceTracking() {
   
   list.innerHTML = tracking.map(item => {
     const product = productMap[item.productId] || {};
-    const currentPriceNum = parseFloat(item.currentPrice?.replace(/[^0-9.]/g, '')) || 0;
-    const belowMin = currentPriceNum > 0 && item.minPrice && currentPriceNum <= item.minPrice;
+    const currentPriceNum = parsePrice(item.currentPrice);
+    const minPriceNum = item.minPrice ? parseFloat(item.minPrice) : null;
+    const belowMin = currentPriceNum !== null && minPriceNum !== null && currentPriceNum <= minPriceNum;
     
     const history = item.priceHistory || [];
-    const maxPrice = Math.max(...history.map(h => h.price || 0));
-    const bars = history.slice(-10).map(h => {
-      const height = maxPrice > 0 ? (h.price / maxPrice) * 100 : 0;
+    const priceNums = history.map(h => h.priceNum ?? parsePrice(h.price)).filter(p => p !== null);
+    const maxPrice = priceNums.length > 0 ? Math.max(...priceNums) : 0;
+    
+    const bars = history.slice(-15).map(h => {
+      const p = h.priceNum ?? parsePrice(h.price);
+      const height = maxPrice > 0 && p !== null ? (p / maxPrice) * 100 : 0;
       return `<div class="history-bar" style="height: ${Math.max(height, 10)}%"></div>`;
     }).join('');
     
+    let changeText = '';
+    let changeClass = '';
+    if (history.length >= 2) {
+      const last = history[history.length - 1];
+      const prev = history[history.length - 2];
+      const lastNum = last.priceNum ?? parsePrice(last.price);
+      const prevNum = prev.priceNum ?? parsePrice(prev.price);
+      if (lastNum !== null && prevNum !== null) {
+        const diff = lastNum - prevNum;
+        if (diff > 0) {
+          changeText = ` +¥${diff.toFixed(2)}`;
+          changeClass = 'up';
+        } else if (diff < 0) {
+          changeText = ` -¥${Math.abs(diff).toFixed(2)}`;
+          changeClass = 'down';
+        }
+      }
+    }
+    
     return `
-      <div class="price-item-card">
+      <div class="price-item-card ${belowMin ? 'alert' : ''}">
         <div class="price-item-header">
           <div class="price-item-title">${product.title || '未知商品'}</div>
-          <div class="price-item-current">${item.currentPrice || '-'}</div>
+          <div class="price-item-current">
+            ${item.currentPrice || '-'}
+            ${changeText ? `<span class="price-change ${changeClass}">${changeText}</span>` : ''}
+            ${belowMin ? '<span class="alert-badge">预警</span>' : ''}
+          </div>
         </div>
         <div class="price-item-meta">
           <div class="meta-item">
@@ -377,9 +430,47 @@ async function loadPriceTracking() {
           </div>
         </div>
         <div class="price-history-chart">${bars}</div>
+        <div class="price-item-actions" style="display:flex; gap:4px; margin-top:8px;">
+          <button class="action-btn update-price-btn" data-id="${item.id}">更新价格</button>
+          <button class="action-btn edit-btn" data-id="${item.id}">编辑</button>
+          <button class="action-btn delete-price-btn" data-id="${item.id}">删除</button>
+        </div>
       </div>
     `;
   }).join('');
+  
+  list.querySelectorAll('.update-price-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const id = e.target.dataset.id;
+      const item = tracking.find(t => t.id === id);
+      const newPrice = prompt('请输入新价格：', item.currentPrice?.replace(/[^0-9.]/g, '') || '');
+      if (newPrice !== null && newPrice.trim()) {
+        const priceStr = newPrice.startsWith('¥') ? newPrice : '¥' + newPrice;
+        const priceNum = parsePrice(newPrice);
+        await API.send('updatePrice', { productId: item.productId, newPrice: priceStr });
+        loadPriceTracking();
+        showToast('价格已更新');
+      }
+    });
+  });
+  
+  list.querySelectorAll('.delete-price-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const id = e.target.dataset.id;
+      if (confirm('确定删除这个价格监控吗？')) {
+        await API.send('deletePriceTracking', { id });
+        loadPriceTracking();
+        showToast('已删除');
+      }
+    });
+  });
+  
+  list.querySelectorAll('.edit-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const id = e.target.dataset.id;
+      showEditPriceModal(id);
+    });
+  });
 }
 
 async function showAddPriceModal() {
@@ -410,7 +501,7 @@ async function showAddPriceModal() {
     </div>
     <div class="form-group">
       <label>当前价格 (元)</label>
-      <input type="number" id="currentPrice" placeholder="例如：99">
+      <input type="text" id="currentPrice" placeholder="例如：¥99 或 99.00">
     </div>
     <div class="form-actions">
       <button class="btn btn-secondary" id="cancelPriceBtn">取消</button>
@@ -424,8 +515,8 @@ async function showAddPriceModal() {
   
   form.querySelector('#confirmPriceBtn').addEventListener('click', async () => {
     const productId = form.querySelector('#priceProductSelect').value;
-    const targetProfit = parseFloat(form.querySelector('#targetProfit').value);
-    const minPrice = parseFloat(form.querySelector('#minPrice').value);
+    const targetProfit = form.querySelector('#targetProfit').value;
+    const minPrice = form.querySelector('#minPrice').value;
     const currentPrice = form.querySelector('#currentPrice').value;
     
     if (!currentPrice) {
@@ -433,11 +524,13 @@ async function showAddPriceModal() {
       return;
     }
     
+    const priceStr = currentPrice.startsWith('¥') ? currentPrice : '¥' + currentPrice;
+    
     await API.send('addPriceTracking', { 
       productId, 
-      targetProfit, 
-      minPrice, 
-      currentPrice: '¥' + currentPrice 
+      targetProfit: targetProfit || null, 
+      minPrice: minPrice || null, 
+      currentPrice: priceStr
     });
     
     closeModal();
@@ -446,9 +539,174 @@ async function showAddPriceModal() {
   });
 }
 
+async function showEditPriceModal(id) {
+  const tracking = await API.send('getPriceTracking');
+  const item = tracking.find(t => t.id === id);
+  if (!item) return;
+  
+  const products = await API.send('getProducts');
+  const product = products.find(p => p.id === item.productId) || {};
+  
+  const form = document.createElement('div');
+  form.innerHTML = `
+    <div class="form-group">
+      <label>商品名称</label>
+      <input type="text" value="${product.title || ''}" disabled style="background:#f5f5f5;">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>目标利润 (元)</label>
+        <input type="number" id="editTargetProfit" value="${item.targetProfit || ''}" placeholder="例如：20">
+      </div>
+      <div class="form-group">
+        <label>最低售价 (元)</label>
+        <input type="number" id="editMinPrice" value="${item.minPrice || ''}" placeholder="例如：59">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>当前价格</label>
+      <input type="text" id="editCurrentPrice" value="${item.currentPrice || ''}" placeholder="例如：¥99">
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-secondary" id="cancelEditBtn">取消</button>
+      <button class="btn btn-primary" id="confirmEditBtn">保存</button>
+    </div>
+  `;
+  
+  showModal('编辑价格监控', form);
+  
+  form.querySelector('#cancelEditBtn').addEventListener('click', closeModal);
+  
+  form.querySelector('#confirmEditBtn').addEventListener('click', async () => {
+    const targetProfit = form.querySelector('#editTargetProfit').value;
+    const minPrice = form.querySelector('#editMinPrice').value;
+    const currentPrice = form.querySelector('#editCurrentPrice').value;
+    
+    const updates = {
+      targetProfit: targetProfit || null,
+      minPrice: minPrice || null
+    };
+    
+    if (currentPrice && currentPrice !== item.currentPrice) {
+      await API.send('updatePrice', { productId: item.productId, newPrice: currentPrice });
+    }
+    
+    await API.send('updatePriceTracking', { id, updates });
+    
+    closeModal();
+    loadPriceTracking();
+    showToast('保存成功');
+  });
+}
+
 async function initCompetitorPanel() {
   document.getElementById('addCompetitorBtn').addEventListener('click', showAddCompetitorModal);
+  document.getElementById('dailyReportBtn').addEventListener('click', showDailyReportModal);
+  document.getElementById('compareProductSelect').addEventListener('change', handleCompareProductChange);
+  
+  await loadProductsForCompare();
   await loadCompetitors();
+}
+
+async function loadProductsForCompare() {
+  const products = await API.send('getProducts');
+  const select = document.getElementById('compareProductSelect');
+  
+  if (products.length > 0) {
+    select.innerHTML = '<option value="">-- 选择已采集商品 --</option>' +
+      products.map(p => `<option value="${p.id}">${p.title.slice(0, 25)}...</option>`).join('');
+  }
+}
+
+async function handleCompareProductChange(e) {
+  const productId = e.target.value;
+  if (productId) {
+    await loadCompareData(productId);
+  } else {
+    document.getElementById('compareStats').style.display = 'none';
+    document.getElementById('ratingCompare').style.display = 'none';
+  }
+}
+
+async function loadCompareData(productId) {
+  const result = await API.send('compareWithProduct', { productId });
+  const { product, competitors, stats } = result;
+  
+  document.getElementById('compareStats').style.display = 'grid';
+  document.getElementById('myPrice').textContent = product?.price || '-';
+  document.getElementById('compAvgPrice2').textContent = stats.avgCompetitorPrice ? '¥' + stats.avgCompetitorPrice : '-';
+  document.getElementById('priceRank').textContent = stats.priceRank ? `第${stats.priceRank}名` : '-';
+  document.getElementById('compCount').textContent = stats.totalCompetitors || 0;
+  
+  const ratingCompare = document.getElementById('ratingCompare');
+  
+  if (competitors.length > 0) {
+    ratingCompare.style.display = 'block';
+    const chart = document.getElementById('ratingChart');
+    
+    const allItems = [
+      { name: '（我的商品）', isMine: true, rating: product?.rating, price: product?.price, sales: product?.sales, priceNum: parsePrice(product?.price) }
+    ].concat(competitors.map(c => ({
+      name: c.name,
+      isMine: false,
+      rating: c.rating,
+      price: c.price,
+      sales: c.sales,
+      priceNum: c.priceNum
+    })));
+    
+    const maxRating = 5;
+    const maxPrice = Math.max(...allItems.map(i => i.priceNum || 0), 1);
+    const maxSales = Math.max(...allItems.map(i => {
+      const s = i.sales;
+      if (!s) return 0;
+      if (s.includes('万')) return parseFloat(s) * 10000;
+      return parseInt(s.replace(/[^\d]/g, '')) || 0;
+    }), 1);
+    
+    let html = '';
+    
+    html += '<div class="compare-section">';
+    html += '<h4>📊 价格对比</h4>';
+    allItems.forEach(item => {
+      const pct = maxPrice > 0 && item.priceNum ? (item.priceNum / maxPrice) * 100 : 0;
+      html += `
+        <div class="rating-item ${item.isMine ? 'is-mine' : ''}">
+          <span class="rating-label" title="${item.name}">
+            ${item.isMine ? '<span class="mine-tag">我</span>' : ''}${item.name.slice(0, 10)}...
+          </span>
+          <div class="rating-bar-container">
+            <div class="rating-bar" style="width: ${pct}%"></div>
+          </div>
+          <span class="rating-value">${item.price || '-'}</span>
+        </div>
+      `;
+    });
+    html += '</div>';
+    
+    html += '<div class="compare-section">';
+    html += '<h4>⭐ 评分对比</h4>';
+    allItems.forEach(item => {
+      const ratingNum = parseFloat(item.rating) || 0;
+      const pct = (ratingNum / maxRating) * 100;
+      html += `
+        <div class="rating-item ${item.isMine ? 'is-mine' : ''}">
+          <span class="rating-label" title="${item.name}">
+            ${item.isMine ? '<span class="mine-tag">我</span>' : ''}${item.name.slice(0, 10)}...
+          </span>
+          <div class="rating-bar-container">
+            <div class="rating-bar" style="width: ${pct}%"></div>
+          </div>
+          <span class="rating-value">${item.rating || '-'}</span>
+        </div>
+      `;
+    });
+    html += '</div>';
+    
+    chart.innerHTML = html;
+  } else {
+    ratingCompare.style.display = 'none';
+  }
 }
 
 async function loadCompetitors() {
@@ -469,35 +727,109 @@ async function loadCompetitors() {
   
   list.innerHTML = competitors.map(c => {
     const history = c.priceHistory || [];
-    const maxPrice = Math.max(...history.map(h => h.price || 0));
-    const bars = history.slice(-10).map(h => {
-      const height = maxPrice > 0 ? (h.price / maxPrice) * 100 : 0;
+    const priceNums = history.map(h => h.priceNum ?? parsePrice(h.price)).filter(p => p !== null);
+    const maxPrice = priceNums.length > 0 ? Math.max(...priceNums) : 0;
+    
+    const bars = history.slice(-15).map(h => {
+      const p = h.priceNum ?? parsePrice(h.price);
+      const height = maxPrice > 0 && p !== null ? (p / maxPrice) * 100 : 0;
       return `<div class="price-bar" style="height: ${Math.max(height, 10)}%"></div>`;
     }).join('');
+    
+    let priceChange = '';
+    let priceChangeClass = '';
+    if (history.length >= 2) {
+      const last = history[history.length - 1];
+      const prev = history[history.length - 2];
+      const lastNum = last.priceNum ?? parsePrice(last.price);
+      const prevNum = prev.priceNum ?? parsePrice(prev.price);
+      if (lastNum !== null && prevNum !== null) {
+        const diff = lastNum - prevNum;
+        if (diff > 0) {
+          priceChange = `+${diff.toFixed(0)}`;
+          priceChangeClass = 'up';
+        } else if (diff < 0) {
+          priceChange = diff.toFixed(0);
+          priceChangeClass = 'down';
+        }
+      }
+    }
+    
+    const lastUpdate = c.lastPriceChange || c.updatedAt || c.createdAt;
     
     return `
       <div class="competitor-card">
         <div class="competitor-header">
           <div class="competitor-name">${c.name}</div>
-          <div class="competitor-price">${c.price || '-'}</div>
+          <div class="competitor-price">
+            ${c.price || '-'}
+            ${priceChange ? `<span class="price-change-badge ${priceChangeClass}">${priceChange}</span>` : ''}
+          </div>
         </div>
         <div class="competitor-meta">
           <span class="rating">⭐ ${c.rating || '-'}</span>
           <span>月销 ${c.sales || '-'}</span>
-          <span>店铺: ${c.shop || '-'}</span>
+          ${c.shop ? `<span class="shop-tag">${c.shop}</span>` : ''}
         </div>
-        <div class="price-trend">${bars}</div>
+        <div class="price-trend">${bars || '<div style="color:#ccc;font-size:10px;">暂无历史数据</div>'}</div>
+        <div class="last-update">最近更新: ${formatTimeAgo(lastUpdate)}</div>
         <div class="competitor-actions">
-          <button class="action-btn" data-id="${c.id}">📝 更新</button>
-          <button class="action-btn delete" data-id="${c.id}">🗑️ 删除</button>
+          <button class="action-btn update-price" data-id="${c.id}">� 更新价格</button>
+          <button class="action-btn update-rating" data-id="${c.id}">⭐ 更新评分</button>
+          <button class="action-btn edit-comp" data-id="${c.id}">✏️ 编辑</button>
+          <button class="action-btn delete delete-comp" data-id="${c.id}">🗑️</button>
         </div>
       </div>
     `;
   }).join('');
   
-  list.querySelectorAll('.action-btn.delete').forEach(btn => {
+  list.querySelectorAll('.update-price').forEach(btn => {
     btn.addEventListener('click', async (e) => {
-      const id = e.target.dataset.id;
+      const id = e.currentTarget.dataset.id;
+      const comp = competitors.find(c => c.id === id);
+      const newPrice = prompt('请输入新价格：', comp.price?.replace(/[^0-9.]/g, '') || '');
+      if (newPrice !== null && newPrice.trim()) {
+        const priceStr = newPrice.startsWith('¥') ? newPrice : '¥' + newPrice;
+        await API.send('updateCompetitorPrice', { id, price: priceStr });
+        loadCompetitors();
+        const selectedId = document.getElementById('compareProductSelect').value;
+        if (selectedId) loadCompareData(selectedId);
+        showToast('价格已更新');
+      }
+    });
+  });
+  
+  list.querySelectorAll('.update-rating').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const id = e.currentTarget.dataset.id;
+      const comp = competitors.find(c => c.id === id);
+      const newRating = prompt('请输入新评分 (0-5)：', comp.rating || '');
+      if (newRating !== null && newRating.trim()) {
+        const rating = parseFloat(newRating);
+        if (!isNaN(rating) && rating >= 0 && rating <= 5) {
+          await API.send('updateCompetitorRating', { id, rating: rating.toString() });
+          loadCompetitors();
+          const selectedId = document.getElementById('compareProductSelect').value;
+          if (selectedId) loadCompareData(selectedId);
+          showToast('评分已更新');
+        } else {
+          showToast('请输入有效的评分');
+        }
+      }
+    });
+  });
+  
+  list.querySelectorAll('.edit-comp').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const id = e.currentTarget.dataset.id;
+      const comp = competitors.find(c => c.id === id);
+      showEditCompetitorModal(id, comp);
+    });
+  });
+  
+  list.querySelectorAll('.delete-comp').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const id = e.currentTarget.dataset.id;
       if (confirm('确定删除这个竞品吗？')) {
         await API.send('deleteCompetitor', { id });
         loadCompetitors();
@@ -528,6 +860,8 @@ function updateCompetitorStats(competitors) {
 }
 
 async function showAddCompetitorModal() {
+  const products = await API.send('getProducts');
+  
   const form = document.createElement('div');
   form.innerHTML = `
     <div class="form-group">
@@ -555,6 +889,13 @@ async function showAddCompetitorModal() {
       </div>
     </div>
     <div class="form-group">
+      <label>关联商品（用于对比）</label>
+      <select id="compRelatedProduct">
+        <option value="">不关联</option>
+        ${products.map(p => `<option value="${p.id}">${p.title.slice(0, 25)}...</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-group">
       <label>商品链接</label>
       <input type="text" id="compUrl" placeholder="https://...">
     </div>
@@ -575,6 +916,7 @@ async function showAddCompetitorModal() {
     const sales = form.querySelector('#compSales').value;
     const shop = form.querySelector('#compShop').value;
     const url = form.querySelector('#compUrl').value;
+    const relatedProductId = form.querySelector('#compRelatedProduct').value;
     
     if (!name) {
       showToast('请输入竞品名称');
@@ -582,12 +924,165 @@ async function showAddCompetitorModal() {
     }
     
     await API.send('addCompetitor', { 
-      competitor: { name, price, rating, sales, shop, url, price: price || '¥0' } 
+      competitor: { 
+        name, 
+        price: price || '¥0', 
+        rating, 
+        sales, 
+        shop, 
+        url,
+        relatedProductId: relatedProductId || null
+      } 
     });
     
     closeModal();
     loadCompetitors();
     showToast('添加成功');
+  });
+}
+
+async function showEditCompetitorModal(id, comp) {
+  const products = await API.send('getProducts');
+  
+  const form = document.createElement('div');
+  form.innerHTML = `
+    <div class="form-group">
+      <label>竞品名称</label>
+      <input type="text" id="editCompName" value="${comp.name || ''}">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>价格</label>
+        <input type="text" id="editCompPrice" value="${comp.price || ''}">
+      </div>
+      <div class="form-group">
+        <label>评分</label>
+        <input type="text" id="editCompRating" value="${comp.rating || ''}">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>月销量</label>
+        <input type="text" id="editCompSales" value="${comp.sales || ''}">
+      </div>
+      <div class="form-group">
+        <label>店铺</label>
+        <input type="text" id="editCompShop" value="${comp.shop || ''}">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>关联商品</label>
+      <select id="editCompRelated">
+        <option value="">不关联</option>
+        ${products.map(p => `<option value="${p.id}" ${comp.relatedProductId === p.id ? 'selected' : ''}>${p.title.slice(0, 25)}...</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-group">
+      <label>商品链接</label>
+      <input type="text" id="editCompUrl" value="${comp.url || ''}">
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-secondary" id="cancelEditCompBtn">取消</button>
+      <button class="btn btn-primary" id="confirmEditCompBtn">保存</button>
+    </div>
+  `;
+  
+  showModal('编辑竞品', form);
+  
+  form.querySelector('#cancelEditCompBtn').addEventListener('click', closeModal);
+  
+  form.querySelector('#confirmEditCompBtn').addEventListener('click', async () => {
+    const name = form.querySelector('#editCompName').value;
+    const price = form.querySelector('#editCompPrice').value;
+    const rating = form.querySelector('#editCompRating').value;
+    const sales = form.querySelector('#editCompSales').value;
+    const shop = form.querySelector('#editCompShop').value;
+    const url = form.querySelector('#editCompUrl').value;
+    const relatedProductId = form.querySelector('#editCompRelated').value;
+    
+    if (!name) {
+      showToast('请输入竞品名称');
+      return;
+    }
+    
+    await API.send('updateCompetitor', { 
+      id, 
+      updates: { 
+        name, 
+        price, 
+        rating, 
+        sales, 
+        shop, 
+        url,
+        relatedProductId: relatedProductId || null
+      } 
+    });
+    
+    closeModal();
+    loadCompetitors();
+    const selectedId = document.getElementById('compareProductSelect').value;
+    if (selectedId) loadCompareData(selectedId);
+    showToast('保存成功');
+  });
+}
+
+async function showDailyReportModal() {
+  const report = await API.send('generateDailyReport');
+  
+  const content = document.createElement('div');
+  content.className = 'daily-report-modal';
+  content.innerHTML = `
+    <div class="report-summary">
+      <div class="report-stat">
+        <div class="report-stat-value" style="color:#2ed573;">${report.summary.newProducts}</div>
+        <div class="report-stat-label">今日新增商品</div>
+      </div>
+      <div class="report-stat">
+        <div class="report-stat-value" style="color:#ff4757;">${report.summary.priceAlerts}</div>
+        <div class="report-stat-label">价格预警</div>
+      </div>
+      <div class="report-stat">
+        <div class="report-stat-value">${report.summary.competitorChanges}</div>
+        <div class="report-stat-label">竞品价格变动</div>
+      </div>
+      <div class="report-stat">
+        <div class="report-stat-value">${report.summary.pendingTasks}</div>
+        <div class="report-stat-label">待跟进任务</div>
+      </div>
+    </div>
+    <div style="font-size:11px; color:#999; margin-bottom:12px;">
+      日期：${report.date}
+    </div>
+    <div class="export-buttons">
+      <button class="btn btn-secondary" id="exportCsvBtn">📄 导出 CSV</button>
+      <button class="btn btn-primary" id="exportHtmlBtn">🌐 导出 HTML</button>
+    </div>
+  `;
+  
+  showModal('运营日报', content);
+  
+  content.querySelector('#exportCsvBtn').addEventListener('click', async () => {
+    const csv = await API.send('exportDailyReportCSV');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `运营日报_${report.date.replace(/\//g, '-')}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('CSV 导出成功');
+  });
+  
+  content.querySelector('#exportHtmlBtn').addEventListener('click', async () => {
+    const html = await API.send('exportDailyReportHTML');
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `运营日报_${report.date.replace(/\//g, '-')}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('HTML 导出成功');
   });
 }
 

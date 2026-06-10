@@ -84,7 +84,38 @@
       <section class="panel" id="panel-competitor">
         <div class="panel-header">
           <h2>竞品看板</h2>
-          <button class="btn btn-primary" id="addCompetitorBtn">➕ 添加竞品</button>
+          <div class="panel-actions">
+            <button class="btn btn-secondary" id="dailyReportBtn">
+              📋 日报
+            </button>
+            <button class="btn btn-primary" id="addCompetitorBtn">➕ 添加竞品</button>
+          </div>
+        </div>
+
+        <div class="compare-selector">
+          <label>选择商品对比竞品：</label>
+          <select id="compareProductSelect">
+            <option value="">-- 选择已采集商品 --</option>
+          </select>
+        </div>
+
+        <div class="compare-stats" id="compareStats" style="display:none;">
+          <div class="stat-card compare-stat">
+            <span class="stat-label">我的价格</span>
+            <span class="stat-value" id="myPrice">-</span>
+          </div>
+          <div class="stat-card compare-stat">
+            <span class="stat-label">竞品均价</span>
+            <span class="stat-value" id="compAvgPrice2">-</span>
+          </div>
+          <div class="stat-card compare-stat">
+            <span class="stat-label">价格排名</span>
+            <span class="stat-value" id="priceRank">-</span>
+          </div>
+          <div class="stat-card compare-stat">
+            <span class="stat-label">竞品数量</span>
+            <span class="stat-value" id="compCount">0</span>
+          </div>
         </div>
         
         <div class="competitor-stats" id="competitorStats">
@@ -114,7 +145,7 @@
         </div>
 
         <div class="rating-compare" id="ratingCompare" style="display:none;">
-          <h3>评分对比</h3>
+          <h3>评分 &amp; 销量对比</h3>
           <div class="rating-chart" id="ratingChart"></div>
         </div>
       </section>

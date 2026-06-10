@@ -904,3 +904,193 @@ body {
   gap: 4px;
   margin-top: 8px;
 }
+
+.compare-selector {
+  background: white;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.compare-selector label {
+  display: block;
+  font-size: 11px;
+  color: #999;
+  margin-bottom: 6px;
+}
+
+.compare-selector select {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #e8e8e8;
+  border-radius: 6px;
+  font-size: 12px;
+  outline: none;
+  background: white;
+}
+
+.compare-selector select:focus {
+  border-color: #667eea;
+}
+
+.compare-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.compare-stat {
+  padding: 8px 4px !important;
+}
+
+.compare-stat .stat-value {
+  font-size: 13px !important;
+}
+
+.compare-stat .stat-label {
+  font-size: 10px !important;
+}
+
+.price-item-card.alert {
+  border: 1px solid #ff4757;
+  background: #fff9fa;
+}
+
+.price-item-card .alert-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  background: #fff0f0;
+  color: #ff4757;
+  border-radius: 10px;
+  font-size: 10px;
+  margin-left: 6px;
+}
+
+.price-change {
+  font-size: 10px;
+  margin-left: 4px;
+}
+
+.price-change.down {
+  color: #2ed573;
+}
+
+.price-change.up {
+  color: #ff4757;
+}
+
+.competitor-card .price-trend {
+  margin-top: 8px;
+}
+
+.competitor-card .last-update {
+  font-size: 10px;
+  color: #999;
+  margin-top: 4px;
+}
+
+.competitor-card .price-change-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  margin-left: 6px;
+  font-weight: 500;
+}
+
+.price-change-badge.down {
+  background: #e8fff0;
+  color: #2ed573;
+}
+
+.price-change-badge.up {
+  background: #fff0f0;
+  color: #ff4757;
+}
+
+.daily-report-modal .report-summary {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.daily-report-modal .report-stat {
+  background: #f9f9ff;
+  padding: 10px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.daily-report-modal .report-stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #667eea;
+  margin-bottom: 2px;
+}
+
+.daily-report-modal .report-stat-label {
+  font-size: 11px;
+  color: #999;
+}
+
+.daily-report-modal .export-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.daily-report-modal .export-buttons .btn {
+  flex: 1;
+}
+
+.rating-item.is-mine {
+  background: #f0f0ff;
+  padding: 6px 8px;
+  border-radius: 6px;
+  margin: -4px -4px;
+}
+
+.rating-item.is-mine .rating-label {
+  font-weight: 600;
+  color: #667eea;
+}
+
+.rating-item .mine-tag {
+  font-size: 9px;
+  background: #667eea;
+  color: white;
+  padding: 1px 4px;
+  border-radius: 3px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.sales-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #764ba2, #f093fb);
+  border-radius: 8px;
+  transition: width 0.5s;
+}
+
+.compare-section {
+  margin-bottom: 14px;
+}
+
+.compare-section h4 {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #666;
+}
+
+.competitor-card .shop-tag {
+  display: inline-block;
+  padding: 1px 5px;
+  background: #f0f2f5;
+  color: #999;
+  border-radius: 3px;
+  font-size: 10px;
+  margin-right: 4px;
+}
