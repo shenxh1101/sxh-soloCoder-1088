@@ -548,14 +548,32 @@ async function showEditPriceModal(id) {
   const product = products.find(p => p.id === item.productId) || {};
   
   const history = item.priceHistory || [];
-  const priceNums = history.map(h => h.priceNum ?? parsePrice(h.price)).filter(p => p !== null);
-  const maxPrice = priceNums.length > 0 ? Math.max(...priceNums) : 0;
+  let viewMode = 'recent30';
   
-  const bars = history.slice(-30).map(h => {
-    const p = h.priceNum ?? parsePrice(h.price);
-    const height = maxPrice > 0 && p !== null ? (p / maxPrice) * 100 : 0;
-    return `<div class="price-bar" style="height: ${Math.max(height, 10)}%" title="${h.price} - ${new Date(h.time).toLocaleString('zh-CN')}"></div>`;
-  }).join('');
+  function renderChart() {
+    const priceNums = history.map(h => h.priceNum ?? parsePrice(h.price)).filter(p => p !== null);
+    const maxPrice = priceNums.length > 0 ? Math.max(...priceNums) : 0;
+    
+    const displayHistory = viewMode === 'all' ? history : history.slice(-30);
+    const chartEl = form.querySelector('#priceHistoryChart');
+    const countLabel = form.querySelector('#displayedCount');
+    
+    const bars = displayHistory.map(h => {
+      const p = h.priceNum ?? parsePrice(h.price);
+      const height = maxPrice > 0 && p !== null ? (p / maxPrice) * 100 : 0;
+      return `<div class="price-bar" style="height: ${Math.max(height, 10)}%" title="${h.price} - ${new Date(h.time).toLocaleString('zh-CN')}"></div>`;
+    }).join('');
+    
+    if (countLabel) {
+      countLabel.textContent = viewMode === 'all' 
+        ? `（显示全部 ${displayHistory.length} 条 / 共 ${history.length} 条）` 
+        : `（显示最近 ${displayHistory.length} 条 / 共 ${history.length} 条）`;
+    }
+    
+    if (chartEl) {
+      chartEl.innerHTML = bars || '<div style="color:#ccc;font-size:11px;width:100%;text-align:center;">暂无历史数据</div>';
+    }
+  }
   
   const form = document.createElement('div');
   form.innerHTML = `
@@ -578,10 +596,15 @@ async function showEditPriceModal(id) {
       <input type="text" id="editCurrentPrice" value="${item.currentPrice || ''}" placeholder="例如：¥99">
     </div>
     <div class="form-group">
-      <label>价格历史趋势 <span style="color:#999;font-weight:normal;">（共 ${history.length} 条记录）</span></label>
-      <div class="price-history-chart" style="height:60px; background:#f9f9ff; border-radius:6px; padding:8px; display:flex; align-items:flex-end; gap:2px;">
-        ${bars || '<div style="color:#ccc;font-size:11px;width:100%;text-align:center;">暂无历史数据</div>'}
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+        <label style="margin:0;">价格历史趋势 <span id="displayedCount" style="color:#999;font-weight:normal;"></span></label>
+        <div class="history-toggle-group">
+          <button type="button" class="toggle-btn active" data-mode="recent30">最近30条</button>
+          <button type="button" class="toggle-btn" data-mode="all">全部</button>
+          <button type="button" class="toggle-btn toggle-export" id="exportHistoryBtn">📥 导出明细</button>
+        </div>
       </div>
+      <div id="priceHistoryChart" class="price-history-chart" style="height:60px; background:#f9f9ff; border-radius:6px; padding:8px; display:flex; align-items:flex-end; gap:2px; overflow-x:auto;"></div>
     </div>
     <div class="form-actions">
       <button class="btn btn-secondary" id="cancelEditBtn">取消</button>
@@ -590,6 +613,36 @@ async function showEditPriceModal(id) {
   `;
   
   showModal('编辑价格监控', form);
+  renderChart();
+  
+  form.querySelectorAll('.toggle-btn[data-mode]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      form.querySelectorAll('.toggle-btn[data-mode]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      viewMode = btn.dataset.mode;
+      renderChart();
+    });
+  });
+  
+  form.querySelector('#exportHistoryBtn').addEventListener('click', async () => {
+    try {
+      const csv = await API.send('exportPriceHistory', { id });
+      if (!csv) {
+        showToast('暂无可导出的历史记录');
+        return;
+      }
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `价格历史_${product.title?.slice(0,10) || '商品'}_${new Date().toLocaleDateString('zh-CN')}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('已导出明细');
+    } catch (e) {
+      showToast('导出失败：' + e.message);
+    }
+  });
   
   form.querySelector('#cancelEditBtn').addEventListener('click', closeModal);
   
@@ -702,11 +755,56 @@ async function loadCompareData(productId) {
     
     if (stats.suggestions && stats.suggestions.length > 0) {
       html += '<div class="compare-suggestions">';
-      html += '<h4>💡 运营建议</h4>';
+      html += '<h4>💡 运营策略建议</h4>';
       stats.suggestions.forEach(s => {
         const iconMap = { price: '💰', rating: '⭐', sales: '📦', general: '✅' };
-        html += `<div class="suggestion-item ${s.level}">${iconMap[s.type] || '💡'} ${s.text}</div>`;
+        html += `<div class="suggestion-item ${s.level}">
+          ${s.action ? `<span class="suggestion-action">${s.action}</span>` : ''}
+          ${iconMap[s.type] || '💡'} ${s.text}
+        </div>`;
       });
+      html += '</div>';
+    }
+    
+    if (stats.champions && (stats.champions.lowestPrice.length > 0 || stats.champions.highestRating.length > 0 || stats.champions.highestSales.length > 0)) {
+      html += '<div class="champions-section">';
+      html += '<h4>🏆 竞品参考标杆</h4>';
+      html += '<div class="champions-cards">';
+      
+      if (stats.champions.lowestPrice.length > 0) {
+        const c = stats.champions.lowestPrice[0];
+        html += `
+          <div class="champion-card champion-price">
+            <div class="champion-label">💰 价格最低</div>
+            <div class="champion-name" title="${c.name || ''}">${(c.name || '').slice(0, 12)}${(c.name || '').length > 12 ? '...' : ''}</div>
+            <div class="champion-value">¥${c.price?.toFixed?.(2) || c.price}</div>
+          </div>
+        `;
+      }
+      
+      if (stats.champions.highestRating.length > 0) {
+        const c = stats.champions.highestRating[0];
+        html += `
+          <div class="champion-card champion-rating">
+            <div class="champion-label">⭐ 评分最高</div>
+            <div class="champion-name" title="${c.name || ''}">${(c.name || '').slice(0, 12)}${(c.name || '').length > 12 ? '...' : ''}</div>
+            <div class="champion-value">${c.rating?.toFixed?.(1) || c.rating} 分</div>
+          </div>
+        `;
+      }
+      
+      if (stats.champions.highestSales.length > 0) {
+        const c = stats.champions.highestSales[0];
+        html += `
+          <div class="champion-card champion-sales">
+            <div class="champion-label">📦 销量最高</div>
+            <div class="champion-name" title="${c.name || ''}">${(c.name || '').slice(0, 12)}${(c.name || '').length > 12 ? '...' : ''}</div>
+            <div class="champion-value">${formatSalesNumber(c.sales)}</div>
+          </div>
+        `;
+      }
+      
+      html += '</div>';
       html += '</div>';
     }
     
@@ -809,6 +907,12 @@ function parseSales(salesStr) {
   }
   const num = parseInt(str.replace(/[^\d]/g, ''));
   return isNaN(num) ? null : num;
+}
+
+function formatSalesNumber(num) {
+  if (num === null || num === undefined || isNaN(num)) return '-';
+  if (num >= 10000) return (num / 10000).toFixed(1) + '万';
+  return Math.round(num).toString();
 }
 
 async function loadCompetitors() {
@@ -1348,6 +1452,8 @@ async function generateTitles() {
 }
 
 let currentTaskFilter = 'all';
+let currentProductFilter = '';
+let currentPriorityFilter = '';
 
 async function initTasksPanel() {
   document.getElementById('addTaskBtn').addEventListener('click', showAddTaskModal);
@@ -1361,21 +1467,49 @@ async function initTasksPanel() {
     });
   });
   
+  document.getElementById('taskProductFilter').addEventListener('change', (e) => {
+    currentProductFilter = e.target.value;
+    loadTasks();
+  });
+  
+  document.getElementById('taskPriorityFilter').addEventListener('change', (e) => {
+    currentPriorityFilter = e.target.value;
+    loadTasks();
+  });
+  
   await loadTasks();
   await updateTaskBadge();
 }
 
 async function loadTasks() {
   const tasks = await API.send('getTasks');
+  const products = await API.send('getProducts');
   const list = document.getElementById('taskList');
+  
+  const productFilterEl = document.getElementById('taskProductFilter');
+  const currentVal = productFilterEl.value;
+  const productOptions = [];
+  tasks.forEach(t => {
+    if (t.productId && !productOptions.find(p => p.id === t.productId)) {
+      productOptions.push({ id: t.productId, name: t.productName || products.find(p => p.id === t.productId)?.title || '未知商品' });
+    }
+  });
+  productFilterEl.innerHTML = '<option value="">全部商品</option>' + 
+    productOptions.map(p => `<option value="${p.id}" ${currentVal === p.id ? 'selected' : ''}>${p.name.slice(0, 20)}${p.name.length > 20 ? '...' : ''}</option>`).join('');
   
   let filtered = tasks;
   if (currentTaskFilter === 'pending') {
-    filtered = tasks.filter(t => !t.completed);
+    filtered = filtered.filter(t => !t.completed);
   } else if (currentTaskFilter === 'completed') {
-    filtered = tasks.filter(t => t.completed);
+    filtered = filtered.filter(t => t.completed);
   } else if (currentTaskFilter === 'promo') {
-    filtered = tasks.filter(t => t.type === 'promo');
+    filtered = filtered.filter(t => t.type === 'promo');
+  }
+  if (currentProductFilter) {
+    filtered = filtered.filter(t => t.productId === currentProductFilter);
+  }
+  if (currentPriorityFilter) {
+    filtered = filtered.filter(t => t.priority === currentPriorityFilter);
   }
   
   if (filtered.length === 0) {
@@ -1390,13 +1524,17 @@ async function loadTasks() {
   
   list.innerHTML = filtered.map(task => {
     const typeLabel = { followup: '待跟进', promo: '优惠到期', other: '其他' }[task.type] || '其他';
+    const prioLabel = { high: '🔴 高', medium: '🟡 中', low: '🟢 低' }[task.priority];
     const isUrgent = task.dueDate && new Date(task.dueDate).getTime() - Date.now() < 24 * 60 * 60 * 1000 && !task.completed;
     
     return `
       <div class="task-card ${task.completed ? 'completed' : ''}">
         <input type="checkbox" class="task-checkbox" data-id="${task.id}" ${task.completed ? 'checked' : ''}>
         <div class="task-content">
-          <div class="task-title">${task.title}</div>
+          <div class="task-title-row">
+            <div class="task-title">${task.title}</div>
+            ${task.priority ? `<span class="task-prio task-prio-${task.priority}" title="优先级">${prioLabel}</span>` : ''}
+          </div>
           <div class="task-meta">
             <span class="task-type ${task.type || 'other'}">${typeLabel}</span>
             ${task.dueDate ? `<span class="task-due ${isUrgent ? 'urgent' : ''}">📅 ${formatDate(task.dueDate)}</span>` : ''}

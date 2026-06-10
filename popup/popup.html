@@ -194,6 +194,17 @@
           <button class="filter-btn" data-filter="promo">优惠到期</button>
           <button class="filter-btn" data-filter="completed">已完成</button>
         </div>
+        <div class="task-advanced-filters">
+          <select id="taskProductFilter" class="task-select">
+            <option value="">全部商品</option>
+          </select>
+          <select id="taskPriorityFilter" class="task-select">
+            <option value="">全部优先级</option>
+            <option value="high">🔴 高</option>
+            <option value="medium">🟡 中</option>
+            <option value="low">🟢 低</option>
+          </select>
+        </div>
 
         <div class="task-list" id="taskList">
           <div class="empty-state">

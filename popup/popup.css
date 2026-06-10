@@ -534,7 +534,59 @@ body {
 .task-filters {
   display: flex;
   gap: 6px;
+  margin-bottom: 8px;
+}
+
+.task-advanced-filters {
+  display: flex;
+  gap: 8px;
   margin-bottom: 12px;
+}
+
+.task-select {
+  flex: 1;
+  padding: 5px 8px;
+  border: 1px solid #e8e8e8;
+  border-radius: 6px;
+  font-size: 11px;
+  background: white;
+  color: #666;
+  cursor: pointer;
+  outline: none;
+}
+
+.task-select:focus {
+  border-color: #667eea;
+}
+
+.task-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.task-prio {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.task-prio-high {
+  background: #fff1f0;
+  color: #ff4757;
+}
+
+.task-prio-medium {
+  background: #fffbe6;
+  color: #fa8c16;
+}
+
+.task-prio-low {
+  background: #f6ffed;
+  color: #52c41a;
 }
 
 .filter-btn {
@@ -1173,6 +1225,92 @@ body {
   color: #1e90ff;
 }
 
+.suggestion-action {
+  display: inline-block;
+  background: #667eea;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.suggestion-item.success .suggestion-action {
+  background: #2ed573;
+}
+
+.suggestion-item.warn .suggestion-action {
+  background: #ff4757;
+}
+
+.suggestion-item.info .suggestion-action {
+  background: #1e90ff;
+}
+
+.champions-section {
+  background: #f0f9ff;
+  border: 1px solid #91d5ff;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+
+.champions-section h4 {
+  font-size: 12px;
+  font-weight: 600;
+  color: #096dd9;
+  margin-bottom: 8px;
+}
+
+.champions-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.champion-card {
+  background: #fff;
+  border-radius: 6px;
+  padding: 8px;
+  text-align: center;
+  border: 1px solid #e8f4ff;
+}
+
+.champion-label {
+  font-size: 10px;
+  color: #666;
+  margin-bottom: 4px;
+}
+
+.champion-name {
+  font-size: 11px;
+  color: #333;
+  font-weight: 600;
+  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.champion-value {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.champion-price .champion-value {
+  color: #ff4757;
+}
+
+.champion-rating .champion-value {
+  color: #ffa502;
+}
+
+.champion-sales .champion-value {
+  color: #1e90ff;
+}
+
 .sales-bar {
   background: linear-gradient(90deg, #ffa502, #ff6348) !important;
 }
@@ -1226,6 +1364,57 @@ body {
 
 .task-link:hover {
   opacity: 1;
+}
+
+.history-toggle-group {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.toggle-btn {
+  font-size: 10px;
+  padding: 3px 8px;
+  border: 1px solid #d9d9d9;
+  background: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #666;
+  transition: all 0.2s;
+}
+
+.toggle-btn:hover {
+  border-color: #667eea;
+  color: #667eea;
+}
+
+.toggle-btn.active {
+  background: #667eea;
+  color: #fff;
+  border-color: #667eea;
+}
+
+.toggle-btn.toggle-export {
+  background: #f0f9ff;
+  border-color: #91d5ff;
+  color: #1890ff;
+}
+
+.toggle-btn.toggle-export:hover {
+  background: #e6f7ff;
+}
+
+.price-history-chart {
+  overflow-x: auto;
+}
+
+.price-history-chart::-webkit-scrollbar {
+  height: 4px;
+}
+
+.price-history-chart::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 2px;
 }
 
 .task-note-preview {

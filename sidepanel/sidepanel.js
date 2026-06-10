@@ -32,6 +32,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
   
+  document.getElementById('addTaskCheck').addEventListener('change', (e) => {
+    const options = document.getElementById('quickTaskOptions');
+    options.style.display = e.target.checked ? 'block' : 'none';
+  });
+  
   document.getElementById('refreshBtn').addEventListener('click', refreshData);
   document.getElementById('collectQuickBtn').addEventListener('click', quickCollect);
   document.getElementById('priceQuickBtn').addEventListener('click', quickPriceMonitor);
@@ -80,7 +85,13 @@ async function refreshData() {
 
 async function loadNotes() {
   const notes = await API.send('getNotes', { productUrl: currentTabUrl });
+  const tasks = await API.send('getTasks');
   const list = document.getElementById('notesList');
+  
+  const relatedTasks = {};
+  tasks.forEach(t => {
+    if (t.noteId) relatedTasks[t.noteId] = t;
+  });
   
   if (notes.length === 0) {
     list.innerHTML = `
@@ -92,15 +103,34 @@ async function loadNotes() {
     return;
   }
   
-  list.innerHTML = notes.map(note => `
-    <div class="note-card">
-      <div class="note-content">${escapeHtml(note.content)}</div>
-      <div class="note-footer">
-        <span class="note-time">${formatTime(note.createdAt)}</span>
-        <button class="note-delete" data-id="${note.id}" title="删除">🗑️</button>
+  list.innerHTML = notes.map(note => {
+    const task = relatedTasks[note.id];
+    let taskBadge = '';
+    if (task) {
+      const prioMap = { high: '🔴', medium: '🟡', low: '🟢' };
+      const prioLabel = { high: '高', medium: '中', low: '低' };
+      const statusIcon = task.completed ? '✅' : '⏰';
+      const statusText = task.completed ? '已完成' : '待跟进';
+      const prioIcon = prioMap[task.priority] || '';
+      taskBadge = `
+        <div class="note-task-badge ${task.completed ? 'completed' : ''}">
+          <span>${statusIcon} ${statusText}</span>
+          ${task.priority ? `<span>${prioIcon} ${prioLabel[task.priority] || task.priority}</span>` : ''}
+          ${task.dueDate ? `<span>📅 ${task.dueDate}</span>` : ''}
+        </div>
+      `;
+    }
+    return `
+      <div class="note-card">
+        <div class="note-content">${escapeHtml(note.content)}</div>
+        ${taskBadge}
+        <div class="note-footer">
+          <span class="note-time">${formatTime(note.createdAt)}</span>
+          <button class="note-delete" data-id="${note.id}" title="删除">🗑️</button>
+        </div>
       </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
   
   list.querySelectorAll('.note-delete').forEach(btn => {
     btn.addEventListener('click', async (e) => {
@@ -118,6 +148,9 @@ async function addNote() {
   const input = document.getElementById('noteInput');
   const content = input.value.trim();
   const addTaskCheck = document.getElementById('addTaskCheck');
+  const taskOptions = document.getElementById('quickTaskOptions');
+  const dueDateInput = document.getElementById('taskDueDate');
+  const priorityRadio = document.querySelector('input[name="taskPriority"]:checked');
   
   if (!content) {
     showToast('请输入备注内容');
@@ -134,6 +167,8 @@ async function addNote() {
       title: content.slice(0, 30) + (content.length > 30 ? '...' : ''),
       type: 'followup',
       note: content,
+      priority: priorityRadio?.value || 'medium',
+      dueDate: dueDateInput?.value || null,
       productId: product?.id || null,
       productName: product?.title || currentTabTitle,
       productUrl: currentTabUrl,
@@ -143,6 +178,10 @@ async function addNote() {
     
     await API.send('addTask', { task });
     addTaskCheck.checked = false;
+    taskOptions.style.display = 'none';
+    if (dueDateInput) dueDateInput.value = '';
+    const mediumRadio = document.querySelector('input[name="taskPriority"][value="medium"]');
+    if (mediumRadio) mediumRadio.checked = true;
     showToast('备注和任务已添加');
   } else {
     showToast('备注已添加');

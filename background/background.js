@@ -131,8 +131,8 @@ const PriceTracker = {
       change: oldPriceNum && newPriceNum ? (newPriceNum - oldPriceNum) : null
     });
     
-    if (item.priceHistory.length > 50) {
-      item.priceHistory = item.priceHistory.slice(-50);
+    if (item.priceHistory.length > 200) {
+      item.priceHistory = item.priceHistory.slice(-200);
     }
     
     await Storage.set(DB_KEYS.PRICE_TRACKING, tracking);
@@ -171,8 +171,8 @@ const PriceTracker = {
         time: Date.now(),
         change: oldPriceNum !== null && newPriceNum !== null ? (newPriceNum - oldPriceNum) : null
       });
-      if (history.length > 50) {
-        history = history.slice(-50);
+      if (history.length > 200) {
+        history = history.slice(-200);
       }
       updates.priceHistory = history;
       
@@ -205,6 +205,22 @@ const PriceTracker = {
       title,
       message
     });
+  },
+
+  exportHistoryCSV(id) {
+    const tracking = this.getAll();
+    const item = tracking.find(t => t.id === id);
+    if (!item || !item.priceHistory) return '';
+    
+    const header = '序号,时间,价格,价格(数值),变动(¥)\n';
+    const rows = item.priceHistory.map((h, i) => {
+      const time = new Date(h.time);
+      const timeStr = `${time.getFullYear()}-${String(time.getMonth()+1).padStart(2,'0')}-${String(time.getDate()).padStart(2,'0')} ${String(time.getHours()).padStart(2,'0')}:${String(time.getMinutes()).padStart(2,'0')}:${String(time.getSeconds()).padStart(2,'0')}`;
+      const change = h.change !== null && h.change !== undefined ? h.change.toFixed(2) : '-';
+      return `${i+1},${timeStr},${h.price},${h.priceNum !== null ? h.priceNum.toFixed(2) : '-'},${change}`;
+    }).join('\n');
+    
+    return '\ufeff' + header + rows;
   }
 };
 
@@ -334,9 +350,31 @@ const CompetitorManager = {
     const avgCompetitorRating = compRatings.length > 0 
       ? (compRatings.reduce((a, b) => a + b, 0) / compRatings.length) 
       : null;
+    const maxCompetitorRating = compRatings.length > 0 ? Math.max(...compRatings) : null;
     const avgCompetitorSales = compSalesNums.length > 0
       ? (compSalesNums.reduce((a, b) => a + b, 0) / compSalesNums.length)
       : null;
+    const maxCompetitorSales = compSalesNums.length > 0 ? Math.max(...compSalesNums) : null;
+    
+    const champions = {
+      lowestPrice: [],
+      highestRating: [],
+      highestSales: []
+    };
+    competitors.forEach(c => {
+      const cPrice = parsePrice(c.price);
+      const cRating = parseFloat(c.rating);
+      const cSales = this.parseSales(c.sales);
+      if (cPrice !== null && minCompetitorPrice !== null && cPrice === minCompetitorPrice) {
+        champions.lowestPrice.push({ id: c.id, name: c.name || c.title, price: cPrice });
+      }
+      if (!isNaN(cRating) && maxCompetitorRating !== null && cRating === maxCompetitorRating) {
+        champions.highestRating.push({ id: c.id, name: c.name || c.title, rating: cRating });
+      }
+      if (cSales !== null && maxCompetitorSales !== null && cSales === maxCompetitorSales) {
+        champions.highestSales.push({ id: c.id, name: c.name || c.title, sales: cSales });
+      }
+    });
     
     const priceRank = productPrice !== null && compPrices.length > 0
       ? compPrices.filter(p => p < productPrice).length + 1
@@ -349,21 +387,50 @@ const CompetitorManager = {
       : null;
     
     const priceConclusion = this._getPriceConclusion(productPrice, avgCompetitorPrice, minCompetitorPrice, priceRank);
-    const ratingConclusion = this._getRatingConclusion(productRating, avgCompetitorRating, ratingRank);
-    const salesConclusion = this._getSalesConclusion(productSales, avgCompetitorSales, salesRank);
+    const ratingConclusion = this._getRatingConclusion(productRating, avgCompetitorRating, ratingRank, maxCompetitorRating);
+    const salesConclusion = this._getSalesConclusion(productSales, avgCompetitorSales, salesRank, maxCompetitorSales);
     
     const suggestions = [];
-    if (priceConclusion?.isExpensive) {
-      suggestions.push({ type: 'price', level: 'warn', text: `价格比竞品均价高 ¥${(productPrice - avgCompetitorPrice).toFixed(2)}，考虑降价或增加卖点` });
+    if (priceConclusion?.isExpensive && minCompetitorPrice !== null) {
+      const diffToMin = productPrice - minCompetitorPrice;
+      const champ = champions.lowestPrice[0];
+      suggestions.push({ 
+        type: 'price', 
+        level: 'warn', 
+        action: '考虑降价',
+        text: `价格比最低价「${champ?.name?.slice(0, 15) || '竞品'}」高 ¥${diffToMin.toFixed(2)}，建议降价到 ¥${minCompetitorPrice.toFixed(2)} 附近或强化差异化卖点` 
+      });
+    } else if (priceConclusion?.isCheapest) {
+      suggestions.push({ type: 'price', level: 'success', action: '维持价格', text: '已是最低价，可考虑提价或保持优势加大推广' });
     }
-    if (ratingConclusion?.isLower) {
-      suggestions.push({ type: 'rating', level: 'warn', text: `评分比竞品低 ${(avgCompetitorRating - productRating).toFixed(1)} 分，需要提升评价` });
+    
+    if (ratingConclusion?.isLower && maxCompetitorRating !== null) {
+      const champ = champions.highestRating[0];
+      suggestions.push({ 
+        type: 'rating', 
+        level: 'warn', 
+        action: '主推评价',
+        text: `比最高评分「${champ?.name?.slice(0, 15) || '竞品'}」低 ${(maxCompetitorRating - productRating).toFixed(1)} 分，建议通过赠品、晒图活动提升评价` 
+      });
+    } else if (ratingConclusion?.isHighest) {
+      suggestions.push({ type: 'rating', level: 'success', action: '利用口碑', text: '评分最高，可在详情页和主图突出评分优势' });
     }
-    if (salesConclusion?.isLower) {
-      suggestions.push({ type: 'sales', level: 'info', text: `销量落后，可参考竞品的营销活动` });
+    
+    if (salesConclusion?.isLower && maxCompetitorSales !== null) {
+      const champ = champions.highestSales[0];
+      const salesDiff = maxCompetitorSales - productSales;
+      suggestions.push({ 
+        type: 'sales', 
+        level: 'info', 
+        action: '补销量',
+        text: `比销量冠军「${champ?.name?.slice(0, 15) || '竞品'}」少约 ${this._formatSalesNumber(salesDiff)}，建议通过优惠券、直通车补单或参考其营销节奏` 
+      });
+    } else if (salesConclusion?.isHighest) {
+      suggestions.push({ type: 'sales', level: 'success', action: '保持领先', text: '销量第一，重点关注库存和后续竞品动作' });
     }
+    
     if (suggestions.length === 0 && competitors.length > 0) {
-      suggestions.push({ type: 'general', level: 'success', text: '各项指标表现良好，继续保持！' });
+      suggestions.push({ type: 'general', level: 'success', action: '保持现状', text: '各项指标表现良好，继续保持！' });
     }
     
     return {
@@ -371,7 +438,9 @@ const CompetitorManager = {
       minCompetitorPrice,
       maxCompetitorPrice,
       avgCompetitorRating: avgCompetitorRating ? avgCompetitorRating.toFixed(1) : null,
+      maxCompetitorRating,
       avgCompetitorSales: avgCompetitorSales ? Math.round(avgCompetitorSales) : null,
+      maxCompetitorSales,
       priceRank,
       ratingRank,
       salesRank,
@@ -382,6 +451,7 @@ const CompetitorManager = {
       priceConclusion,
       ratingConclusion,
       salesConclusion,
+      champions,
       suggestions
     };
   },
@@ -426,7 +496,7 @@ const CompetitorManager = {
     };
   },
   
-  _getRatingConclusion(productRating, avgRating, rank) {
+  _getRatingConclusion(productRating, avgRating, rank, maxRating = null) {
     if (productRating === null || avgRating === null) return null;
     const diff = productRating - avgRating;
     
@@ -435,10 +505,13 @@ const CompetitorManager = {
     let isLower = false;
     let isHighest = false;
     
-    if (diff > 0.2) {
-      label = '评分领先';
+    if (maxRating !== null && productRating >= maxRating) {
+      label = '评分最高';
       level = 'success';
       isHighest = true;
+    } else if (diff > 0.2) {
+      label = '评分领先';
+      level = 'success';
     } else if (diff < -0.2) {
       label = '评分偏低';
       level = 'warn';
@@ -461,7 +534,7 @@ const CompetitorManager = {
     };
   },
   
-  _getSalesConclusion(productSales, avgSales, rank) {
+  _getSalesConclusion(productSales, avgSales, rank, maxSales = null) {
     if (productSales === null || avgSales === null || avgSales === 0) return null;
     const diff = productSales - avgSales;
     const diffPercent = ((productSales - avgSales) / avgSales * 100).toFixed(1);
@@ -472,10 +545,13 @@ const CompetitorManager = {
     let isLower = false;
     let isHighest = false;
     
-    if (times > 1.5) {
-      label = '销量领先';
+    if (maxSales !== null && productSales >= maxSales) {
+      label = '销量最高';
       level = 'success';
       isHighest = true;
+    } else if (times > 1.5) {
+      label = '销量领先';
+      level = 'success';
     } else if (times < 0.7) {
       label = '销量落后';
       level = 'warn';
@@ -483,11 +559,6 @@ const CompetitorManager = {
     } else {
       label = '销量接近';
       level = 'neutral';
-    }
-    
-    function formatSales(num) {
-      if (num >= 10000) return (num / 10000).toFixed(1) + '万';
-      return Math.round(num).toString();
     }
     
     return {
@@ -499,9 +570,14 @@ const CompetitorManager = {
       isLower,
       isHighest,
       text: diff >= 0 
-        ? `比竞品均价多 ${formatSales(diff)} 件（${diffPercent}%）` 
-        : `比竞品均价少 ${formatSales(Math.abs(diff))} 件（${diffPercent}%）`
+        ? `比竞品均价多 ${this._formatSalesNumber(diff)} 件（${diffPercent}%）` 
+        : `比竞品均价少 ${this._formatSalesNumber(Math.abs(diff))} 件（${diffPercent}%）`
     };
+  },
+
+  _formatSalesNumber(num) {
+    if (num >= 10000) return (num / 10000).toFixed(1) + '万';
+    return Math.round(num).toString();
   },
 
   parseSales(salesStr) {
@@ -793,19 +869,27 @@ const DailyReport = {
           <tr>
             <th>任务标题</th>
             <th>类型</th>
+            <th>优先级</th>
             <th>关联商品</th>
             <th>截止日期</th>
+            <th>备注</th>
+            <th>操作</th>
           </tr>
         </thead>
         <tbody>
           ${report.pendingTasks.map(t => {
             const typeLabel = { followup: '待跟进', promo: '优惠到期', other: '其他' }[t.type] || '其他';
+            const priorityLabel = { high: '高', medium: '中', low: '低' }[t.priority] || (t.priority || '-');
+            const priorityClass = { high: 'prio-high', medium: 'prio-medium', low: 'prio-low' }[t.priority] || '';
             return `
             <tr>
               <td>${t.title}</td>
               <td><span class="task-type ${t.type || 'other'}">${typeLabel}</span></td>
-              <td>${t.productName ? t.productName.slice(0, 20) + '...' : '-'}</td>
+              <td>${t.priority ? `<span class="task-prio ${priorityClass}">${priorityLabel}</span>` : '-'}</td>
+              <td>${t.productName ? t.productName.slice(0, 20) + (t.productName.length > 20 ? '...' : '') : '-'}</td>
               <td>${t.dueDate || '-'}</td>
+              <td style="font-size:11px;color:#999;">${t.notePreview || (t.note ? t.note.slice(0, 20) : '-')}</td>
+              <td>${t.productUrl ? `<a href="${t.productUrl}" target="_blank" style="color:#667eea;text-decoration:none;font-size:12px;">打开商品 →</a>` : '-'}</td>
             </tr>
             `;
           }).join('')}
@@ -847,6 +931,10 @@ const DailyReport = {
     .task-type.followup { background: #e8f4fd; color: #1e90ff; }
     .task-type.promo { background: #fff4e6; color: #ff8c00; }
     .task-type.other { background: #f0f2f5; color: #666; }
+    .task-prio { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .task-prio.prio-high { background: #fff1f0; color: #ff4757; }
+    .task-prio.prio-medium { background: #fffbe6; color: #fa8c16; }
+    .task-prio.prio-low { background: #f6ffed; color: #52c41a; }
     .empty { text-align: center; padding: 20px; color: #999; font-size: 13px; }
     .footer { text-align: center; padding: 16px; color: #bbb; font-size: 12px; }
   </style>
@@ -858,23 +946,27 @@ const DailyReport = {
       <div class="date">${report.date}</div>
     </div>
     
-    <div class="stats">
+    <div class="stats" style="grid-template-columns: repeat(${include.length}, 1fr);">
+      ${include.includes('products') ? `
       <div class="stat-card">
         <div class="stat-value success">${report.summary.newProducts}</div>
         <div class="stat-label">今日新增商品</div>
-      </div>
+      </div>` : ''}
+      ${include.includes('priceAlerts') ? `
       <div class="stat-card">
         <div class="stat-value alert">${report.summary.priceAlerts}</div>
         <div class="stat-label">价格预警</div>
-      </div>
+      </div>` : ''}
+      ${include.includes('competitors') ? `
       <div class="stat-card">
         <div class="stat-value">${report.summary.competitorChanges}</div>
         <div class="stat-label">竞品价格变动</div>
-      </div>
+      </div>` : ''}
+      ${include.includes('tasks') ? `
       <div class="stat-card">
         <div class="stat-value">${report.summary.pendingTasks}</div>
         <div class="stat-label">待跟进任务</div>
-      </div>
+      </div>` : ''}
     </div>
     
     ${sectionsHtml}
@@ -1074,6 +1166,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           break;
         case 'updatePriceTracking':
           sendResponse(await PriceTracker.update(request.id, request.updates));
+          break;
+        case 'exportPriceHistory':
+          sendResponse(PriceTracker.exportHistoryCSV(request.id));
           break;
 
         case 'getCompetitors':

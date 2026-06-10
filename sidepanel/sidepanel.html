@@ -31,6 +31,20 @@
 
     <div class="note-input-section">
       <textarea id="noteInput" placeholder="记录一下这个商品的想法、卖点、问题..."></textarea>
+      <div class="quick-task-options" id="quickTaskOptions" style="display:none;">
+        <div class="task-options-row">
+          <label>截止日期</label>
+          <input type="date" id="taskDueDate">
+        </div>
+        <div class="task-options-row">
+          <label>优先级</label>
+          <div class="priority-group">
+            <label class="priority-option"><input type="radio" name="taskPriority" value="high"><span>高</span></label>
+            <label class="priority-option"><input type="radio" name="taskPriority" value="medium" checked><span>中</span></label>
+            <label class="priority-option"><input type="radio" name="taskPriority" value="low"><span>低</span></label>
+          </div>
+        </div>
+      </div>
       <div class="note-actions">
         <label class="quick-task-checkbox">
           <input type="checkbox" id="addTaskCheck">

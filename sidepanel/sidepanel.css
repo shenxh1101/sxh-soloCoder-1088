@@ -125,9 +125,72 @@ body {
   border-color: #667eea;
 }
 
+.quick-task-options {
+  background: #f9f9ff;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  border: 1px solid #e8e8ff;
+}
+
+.task-options-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.task-options-row:last-child {
+  margin-bottom: 0;
+}
+
+.task-options-row > label {
+  font-size: 11px;
+  color: #666;
+  min-width: 50px;
+}
+
+.task-options-row input[type="date"] {
+  flex: 1;
+  padding: 4px 6px;
+  border: 1px solid #e8e8e8;
+  border-radius: 4px;
+  font-size: 11px;
+  background: #fff;
+}
+
+.priority-group {
+  display: flex;
+  gap: 4px;
+}
+
+.priority-option {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 11px;
+  padding: 3px 8px;
+  border: 1px solid #e8e8e8;
+  border-radius: 4px;
+  cursor: pointer;
+  background: #fff;
+}
+
+.priority-option input[type="radio"] {
+  margin: 0;
+  cursor: pointer;
+}
+
+.priority-option:has(input:checked) {
+  background: #667eea;
+  color: #fff;
+  border-color: #667eea;
+}
+
 .note-actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .btn {
@@ -193,6 +256,27 @@ body {
   white-space: pre-wrap;
   word-break: break-word;
   margin-bottom: 8px;
+}
+
+.note-task-badge {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  background: #fff8e1;
+  border-radius: 4px;
+  border-left: 3px solid #ffa502;
+  font-size: 11px;
+}
+
+.note-task-badge.completed {
+  background: #f0fff4;
+  border-left-color: #2ed573;
+}
+
+.note-task-badge span {
+  color: #666;
 }
 
 .note-footer {
