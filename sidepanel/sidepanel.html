@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>商品备注</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <div class="sidepanel">
+    <header class="sidepanel-header">
+      <div class="header-title">
+        <span class="header-icon">📝</span>
+        <h2>商品备注</h2>
+      </div>
+      <button class="refresh-btn" id="refreshBtn" title="刷新">🔄</button>
+    </header>
+
+    <div class="current-page-info">
+      <div class="page-title" id="pageTitle">加载中...</div>
+    </div>
+
+    <div class="quick-actions">
+      <button class="quick-btn" id="collectQuickBtn">
+      📦 收藏商品
+      </button>
+      <button class="quick-btn" id="priceQuickBtn">
+      💰 监控价格
+      </button>
+    </div>
+
+    <div class="note-input-section">
+      <textarea id="noteInput" placeholder="记录一下这个商品的想法、卖点、问题..."></textarea>
+      <div class="note-actions">
+      <button class="btn btn-primary" id="addNoteBtn">添加备注</button>
+      </div>
+    </div>
+
+    <div class="notes-section">
+      <h3>历史备注</h3>
+      <div class="notes-list" id="notesList">
+        <div class="empty-state">
+          <p>还没有备注</p>
+          <p class="hint">在上方输入框添加第一条备注吧</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="product-summary" id="productSummary" style="display:none;">
+      <h3>商品信息</h3>
+      <div class="summary-card" id="summaryCard"></div>
+    </div>
+  </div>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>

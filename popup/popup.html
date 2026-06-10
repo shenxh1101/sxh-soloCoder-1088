@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>电商运营助手</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="logo">
+        <span class="logo-icon">🛒</span>
+        <h1>电商运营助手</h1>
+      </div>
+      <button class="sidepanel-btn" id="openSidepanel" title="打开侧边栏">
+        📝 备注
+      </button>
+    </header>
+
+    <nav class="tabs">
+      <button class="tab active" data-tab="collect">
+        <span class="tab-icon">📦</span>
+        <span>商品采集</span>
+      </button>
+      <button class="tab" data-tab="price">
+        <span class="tab-icon">💰</span>
+        <span>价格监控</span>
+      </button>
+      <button class="tab" data-tab="competitor">
+        <span class="tab-icon">📊</span>
+        <span>竞品看板</span>
+      </button>
+      <button class="tab" data-tab="copywriting">
+        <span class="tab-icon">✍️</span>
+        <span>文案助手</span>
+      </button>
+      <button class="tab" data-tab="tasks">
+        <span class="tab-icon">⏰</span>
+        <span>任务提醒</span>
+        <span class="badge" id="taskBadge">0</span>
+      </button>
+    </nav>
+
+    <main class="content">
+      <section class="panel active" id="panel-collect">
+        <div class="panel-header">
+          <h2>商品采集</h2>
+          <div class="panel-actions">
+            <button class="btn btn-primary" id="collectBtn">
+              ➕ 采集当前商品
+            </button>
+            <button class="btn btn-secondary" id="exportBtn">
+              📤 导出清单
+            </button>
+          </div>
+        </div>
+        
+        <div class="search-box">
+          <input type="text" id="productSearch" placeholder="搜索已采集商品...">
+        </div>
+
+        <div class="product-list" id="productList">
+          <div class="empty-state">
+            <p>还没有采集商品</p>
+            <p class="hint">打开商品页面，点击"采集当前商品"开始</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-price">
+        <div class="panel-header">
+          <h2>价格监控</h2>
+          <button class="btn btn-primary" id="addPriceBtn">➕ 添加监控</button>
+        </div>
+        <div class="price-list" id="priceList">
+          <div class="empty-state">
+            <p>暂无价格监控商品</p>
+            <p class="hint">添加商品后可设置目标利润和最低售价</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-competitor">
+        <div class="panel-header">
+          <h2>竞品看板</h2>
+          <button class="btn btn-primary" id="addCompetitorBtn">➕ 添加竞品</button>
+        </div>
+        
+        <div class="competitor-stats" id="competitorStats">
+          <div class="stat-card">
+            <span class="stat-label">竞品总数</span>
+            <span class="stat-value" id="compTotalCount">0</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">均价</span>
+            <span class="stat-value" id="compAvgPrice">-</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">最高价</span>
+            <span class="stat-value" id="compMaxPrice">-</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">最低价</span>
+            <span class="stat-value" id="compMinPrice">-</span>
+          </div>
+        </div>
+
+        <div class="competitor-list" id="competitorList">
+          <div class="empty-state">
+            <p>暂无竞品数据</p>
+            <p class="hint">添加竞品进行对比分析</p>
+          </div>
+        </div>
+
+        <div class="rating-compare" id="ratingCompare" style="display:none;">
+          <h3>评分对比</h3>
+          <div class="rating-chart" id="ratingChart"></div>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-copywriting">
+        <div class="panel-header">
+          <h2>文案助手</h2>
+        </div>
+
+        <div class="copy-section">
+          <h3>标题优化</h3>
+          <div class="title-input-group">
+            <input type="text" id="baseTitle" placeholder="输入基础标题">
+            <input type="text" id="keywords" placeholder="输入关键词（逗号分隔）">
+            <button class="btn btn-primary" id="generateTitleBtn">生成建议</button>
+          </div>
+          <div class="title-suggestions" id="titleSuggestions"></div>
+        </div>
+
+        <div class="copy-section">
+          <div class="section-header">
+            <h3>卖点词库</h3>
+            <button class="btn btn-small btn-secondary" id="batchAddPointsBtn">批量添加</button>
+          </div>
+          <div class="selling-points" id="sellingPoints">
+            <div class="empty-state small">
+              <p>还没有卖点词</p>
+            </div>
+          </div>
+          <div class="add-point">
+            <input type="text" id="newPointInput" placeholder="添加卖点词">
+            <button class="btn btn-primary" id="addPointBtn">添加</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-tasks">
+        <div class="panel-header">
+          <h2>任务提醒</h2>
+          <button class="btn btn-primary" id="addTaskBtn">➕ 新建任务</button>
+        </div>
+
+        <div class="task-filters">
+          <button class="filter-btn active" data-filter="all">全部</button>
+          <button class="filter-btn" data-filter="pending">待跟进</button>
+          <button class="filter-btn" data-filter="promo">优惠到期</button>
+          <button class="filter-btn" data-filter="completed">已完成</button>
+        </div>
+
+        <div class="task-list" id="taskList">
+          <div class="empty-state">
+            <p>暂无任务</p>
+            <p class="hint">添加待跟进商品和优惠提醒</p>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="modal" id="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="modalTitle">标题</h3>
+        <button class="close-btn" id="closeModal">✕</button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
